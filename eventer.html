@@ -1,0 +1,134 @@
+<html>
+<head>
+<title>Eventer</title>
+<script src="js/jquery-1.7.1.min.js"></script>
+<script src="js/jquery-ui-1.8.17.custom.min.js"></script>
+<link href="css/cupertino/jquery-ui-1.8.17.custom.css" rel="stylesheet" type="text/css">
+
+<style>
+body, table {font-family: Lucida Grande, Lucida Sans, Arial, sans-serif; font-size: 11px;}
+body {height: 100%; margin: 0px}
+#history {position: absolute; top: 0px; bottom: 150px; width: 100%; overflow-y: scroll}
+#enter {position: absolute; bottom: 0px; height: 150px; width: 100%}
+#event {width: 100%}
+</style>
+
+<script>
+
+var history = [];
+var userId = 2; // test user
+var months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+function loadHistory(h) {
+  history = h;
+  refresh();
+}
+
+function restoreHistory() {
+  if (localStorage.history) {
+    var history = JSON.parse(localStorage.history);
+    for (var i = 0; i < history.length; i++) {
+      if (history[i].sync == 'sending') history[i].sync = 'queued';
+    }
+    loadHistory(history);
+  }
+}
+
+function clearHistory() {
+  loadHistory([]);			
+}
+
+function requeueAll() {
+  for (var i = 0; i < history.length; i++) {
+    history[i].sync = 'queued';
+  }
+  refresh();
+  sync();
+}
+
+// Format a positive number, showing the last two digits
+function f2(n) {
+  var ret = n + '';
+  while (ret.length < 2) ret = "0" + ret;
+  return ret;
+}
+
+function sync() {
+  for (var i = 0; i < history.length; i++) {
+    var item = history[i];
+    if (item.sync == 'queued') {
+      var payload = {};
+      payload.timerange = JSON.stringify({begin: history[i].time, end: history[i].time});
+      payload.comment = history[i].description;
+      payload.dev_nickname = "Eventer";
+      item.sync = 'sending';
+      //var prefix='http://www.bodytrack.org';
+      //var prefix='http://localhost:3009';
+      var prefix='http://rstest.bodytrack.org';
+      $.getJSON(prefix + '/users/' + userId + '/upload?callback=?',
+             payload,
+             function(data, status) {
+               if (status == 'success' && !data.error) {
+                 delete item.sync;
+               } else {
+                 item.sync = 'failed';
+               }
+               refresh();
+               sync();
+             });
+      refresh();
+      return;
+    }
+  }
+}
+
+function refresh() {
+  localStorage.history = JSON.stringify(history);
+  var autocomplete = [];
+  var historyHtml = ["<table>"];
+  var done = {};
+  for (var i = 0; i < history.length; i++) {
+    var date = new Date(history[i].time*1000);
+    var time = date.getFullYear() + "." + months[date.getMonth()] + "." + date.getDate() + " " +
+               f2(date.getHours()) + ":" + f2(date.getMinutes()) + ":" + f2(date.getSeconds());
+    historyHtml.push('<tr>');
+    historyHtml.push('<td>' + time + '</td>');
+    historyHtml.push('<td>' + history[i].description + '</td>');
+    historyHtml.push('<td>' + (history[i].sync || "") + '</td>');
+    historyHtml.push('</tr>');
+    if (!done[history[i].description]) {
+      done[history[i].description] = true;
+      autocomplete.push(history[i].description);
+    }
+  }
+  historyHtml.push('</table>');
+  autocomplete = autocomplete.reverse();
+  $('#event').autocomplete({source: autocomplete, delay:100, autoFocus:true});
+  $('#history').html(historyHtml.join(''));
+  $('#history').prop('scrollTop',$('#history').prop('scrollHeight')); // scroll to bottom
+}
+
+function addEvent() {
+  var event={};
+  event.time = new Date().getTime()/1000;
+  event.description = $('#event').val();
+  event.sync = 'queued';
+  history.push(event);
+  $('#event').val('');
+  refresh();
+  sync();
+}
+
+function init() {
+  restoreHistory();
+  sync();
+  $('#event').keydown(function(e) { if (e.keyCode == 13) addEvent(); })
+             .focus();
+}
+
+$(init);
+</script>
+</head><body>
+<div id="history"></div>
+<div id="enter"><input id="event"/></div>
+</body></html>
