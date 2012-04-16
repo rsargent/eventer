@@ -1,0 +1,181 @@
+<html>
+<head>
+<style>
+body {
+  font-family: arial;
+}
+#topbar div {
+  vertical-align: top;
+}
+#timer {
+  font-size:36px;
+  height: 90px;
+  background: #ccf;
+  display: inline-block;
+  padding: 9px;
+  width: 100px;
+  text-align: center;
+}
+.postitbar {
+  height: 108px;
+  vertical-align: top;
+}
+.postitbar * { 
+  background: yellow; 
+  border-color: black;
+  border-style: solid;
+  display: inline-block;
+  border-width: 1px;
+  margin-left: 4px;
+  margin-right: 4px;
+  padding: 3px;
+  height: 100px;
+}
+</style>
+<script src="js/jquery-1.7.1.min.js"></script>
+<script src="js/jquery-ui-1.8.17.custom.min.js"></script>
+<script>
+function childrenWidth(elt) {
+  var width = 0;
+  elt.children().each(function() { 
+    width += $(this).outerWidth(true); 
+  });
+  return width;
+}
+
+// idle, running, paused
+
+var timerState = "idle";
+var startTimerVal = 25*60;
+var timerVal = startTimerVal;
+var timerTimeout = null;
+
+// Format a positive number, showing the last two digits
+function f2(n) {
+  var ret = n + '';
+  while (ret.length < 2) ret = '0' + ret;
+  return ret;
+}
+
+function resetTimerIfIdle() {
+  if (timerState == 'idle') {
+    timerVal = startTimerVal;
+    updateTimer();
+  } 
+}
+
+function startOrPauseTimer() {
+  if (timerState == 'running') {
+    console.log('Pause timer');
+    if (timerTimeout) clearTimeout(timerTimeout);
+    timerState = 'paused';
+  } else {
+    if (timerState == 'idle') {
+      timerVal = startTimerVal;
+      console.log('Start timer');
+    } else {
+      console.log('Unpause timer');
+    }
+    lastTickTime = new Date().getTime();
+    timerTimeout = setTimeout(timerTick, 1000);
+    timerState = 'running';
+  }
+  updateTimer();
+}
+
+function abortTimer() {
+  if (timerState == 'idle') return;
+  console.log('Abort timer');
+  timerState = 'idle';
+  if (timerTimeout) clearTimeout(timerTimeout);
+  timerVal = startTimerVal;
+  updateTimer();
+}
+
+function updateTimer() {
+  $('#timerval').html(f2(Math.floor(timerVal / 60)) + ':' + f2(timerVal % 60));
+  if (timerState == 'idle') $('#startpause').html('Start');
+  if (timerState == 'paused') $('#startpause').html('Unpause');
+  if (timerState == 'running') $('#startpause').html('Pause');
+}
+
+function timerTick() {
+  if (timerState != 'running') return;
+  // How many ticks have elapsed?
+  var now = new Date().getTime();
+  // OK to count up to 10 ticks, not more.  More probably means the computer slept or the clock time changed
+  var ticksElapsed = Math.floor((now + 100 - lastTickTime) / 1000);
+  if (ticksElapsed > 10) {
+    ticksElapsed = 10;
+    lastTickTime = now;
+  } else {
+    lastTickTime += ticksElapsed * 1000;
+  }
+  timerVal -= ticksElapsed;
+  if (timerVal <= 0) {
+    timerVal = 0;
+    timerState = 'idle';
+    console.log('Timer done');
+    setTimeout(resetTimerIfIdle, 2500);
+  } else {
+    timerTimeout = setTimeout(timerTick, 1000 - now + lastTickTime);
+  }
+  updateTimer();
+}
+
+function updateTopbar() {
+  var fixed=[];
+  var variable=[];
+  var width_used = 0;
+  var nelastic = 0;
+  $('#topbar .elastic').each(function() {
+    nelastic++;
+    width_used += childrenWidth($(this));
+  });
+  $('#topbar .inelastic').each(function() {
+    width_used += $(this).outerWidth(true);
+  });
+  var total = $('#topbar').innerWidth();
+  var margin = total - width_used;
+
+  $('#topbar .elastic').each(function() {
+    $(this).css('width', childrenWidth($(this)) + margin / nelastic);
+  });
+}
+function init() {
+  $('.postitbar').sortable({
+                     connectWith: '.postitbar', 
+                     containment: '#topbar', 
+                     tolerance: 'pointer',
+                     scroll: false,
+                     update: updateTopbar
+                           });
+  $('body').disableSelection();
+  $(window).resize(updateTopbar);
+  $('#startpause').click(startOrPauseTimer);
+  $('#abort').click(abortTimer);
+  updateTopbar();
+  updateTimer();
+}
+$(init);
+</script>
+</head>
+<body>
+<table style="width:100%"><tr id="topbar" style="height: 100px">
+<td id="timer" class="inelastic">
+<span id='timerval'></span><br>
+<button id='startpause'>Start</button><br>
+<button id='abort'>Abort</button>
+</td>
+<td id="postitbar0" class="postitbar elastic" style="display:inline-block; background:#fcc;">
+<div>Yoyodyne<br>second</div>
+<div>Yoyodyne4</div>
+</td>
+<td id="postitbar1" class="postitbar elastic" style="display:inline-block; text-align: right; background:#cfc;">
+<div>Yoyodyne4</div>
+</td>
+</tr>
+</table>
+
+</body>
+</html>
