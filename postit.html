@@ -16,6 +16,9 @@ body {
   width: 100px;
   text-align: center;
 }
+#postitcontrol {
+  background: #cff;
+}
 .postitbar {
   height: 108px;
   vertical-align: top;
@@ -154,15 +157,15 @@ function resetTimerIfIdle() {
 
 function startOrPauseTimer() {
   if (timerState == 'running') {
-    console.log('Pause timer');
+    sendToEventer('Pause timer ' + timerValue());
     if (timerTimeout) clearTimeout(timerTimeout);
     timerState = 'paused';
   } else {
     if (timerState == 'idle') {
       timerVal = startTimerVal;
-      console.log('Start timer');
+      sendToEventer('Start timer ' + timerValue());
     } else {
-      console.log('Unpause timer');
+      sendToEventer('Unpause timer ' + timerValue());
     }
     lastTickTime = new Date().getTime();
     timerTimeout = setTimeout(timerTick, 1000);
@@ -173,15 +176,19 @@ function startOrPauseTimer() {
 
 function abortTimer() {
   if (timerState == 'idle') return;
-  console.log('Abort timer');
+  sendToEventer('Abort timer ' + timerValue());
   timerState = 'idle';
   if (timerTimeout) clearTimeout(timerTimeout);
   timerVal = startTimerVal;
   updateTimer();
 }
 
+function timerValue() {
+  return f2(Math.floor(timerVal / 60)) + ':' + f2(timerVal % 60);
+}
+
 function updateTimer() {
-  $('#timerval').html(f2(Math.floor(timerVal / 60)) + ':' + f2(timerVal % 60));
+  $('#timerval').html(timerValue());
   if (timerState == 'idle') $('#startpause').html('Start');
   if (timerState == 'paused') $('#startpause').html('Unpause');
   if (timerState == 'running') $('#startpause').html('Pause');
@@ -203,7 +210,7 @@ function timerTick() {
   if (timerVal <= 0) {
     timerVal = 0;
     timerState = 'idle';
-    console.log('Timer done');
+    sendToEventer('Timer done ' + timerValue());
     setTimeout(resetTimerIfIdle, 2500);
   } else {
     timerTimeout = setTimeout(timerTick, 1000 - now + lastTickTime);
@@ -231,28 +238,57 @@ function updateTopbar() {
   });
 }
 function updateEdit() {
-  editingDiv.text($('#edit').val());
-  $('#edit').css(editingDiv.offset())
-            .width(editingDiv.outerWidth())
-            .height(editingDiv.outerHeight())
-            .show();
+  if (editingDiv) {
+    editingDiv.text($('#edit').val());
+    $('#edit').css(editingDiv.offset())
+              .width(editingDiv.outerWidth())
+              .height(editingDiv.outerHeight())
+              .show();
+  }
 }
 var editingDiv = null;
-function textchange() {
-  console.log('textchange');
-}
+var previousText;
 function startEdit(elt) {
-  console.log("startedit");
+  previousText = elt.text();
   editingDiv = elt;
-  console.log('Edit ' + editingDiv);
   $('#edit').val(editingDiv.text());
   updateEdit();
   $('#edit')[0].focus();
   $('#edit')[0].select();
   $('#edit').bind('textchange', updateEdit);
 }
+function sendToEventer(msg)
+{
+  console.log('sendToEventer> ' + msg);
+}
 function endEdit() {
-  $('#edit').hide();
+  if (editingDiv) {
+    updateEdit();
+    $('#edit').hide();
+    editingDiv.text($.trim(editingDiv.text()));
+    if (editingDiv.text() == "") {
+      deletePostit(editingDiv, previousText);
+    } else if (editingDiv.text() != previousText) {
+      if (previousText == "") {
+        sendToEventer('Added postit "' + editingDiv.text() + '"');
+      } else {		  
+        sendToEventer('Changed postit "' + previousText + '" to "' + editingDiv.text() + '"');
+      }
+    }
+    editingDiv = null;
+  }
+}
+function deletePostit(postit, previousText) {
+  if (previousText != '') {
+    sendToEventer('Deleted postit "' + previousText + '"');
+  }
+  postit.remove();
+}
+function addPostit() {
+  $('#postitbar0').prepend('<div></div>');
+  var postit = $('#postitbar0').children(':first');
+  initPostit(postit);
+  startEdit(postit);
 }
 
 // Return finishes edit, unless shift or alt are pressed, in which case a newline is inserted
@@ -261,11 +297,16 @@ function endEdit() {
 // Apps that use return to finish edit, or alt-return (option-return on mac) to insert newline:
 //    Excel on Windows.  (Excel on Mac uses option-command-return, yuk)
 function editKeypress(e) {
+  console.log(e.which);
   if (e.which == 13 && !e.shiftKey && !e.altKey) {
     e.preventDefault();
     endEdit();
   }
 }
+function initPostit(postit) {
+  postit.dblclick(function(){startEdit($(this));});
+}
+
 function init() {
   $('.postitbar').sortable({
                      connectWith: '.postitbar', 
@@ -278,11 +319,15 @@ function init() {
   $(window).resize(updateTopbar);
   $('#startpause').click(startOrPauseTimer);
   $('#abort').click(abortTimer);
-  $('.postitbar *').dblclick(function(){startEdit($(this));});
+  initPostit($('.postitbar *'));
   updateTopbar();
   updateTimer();
   $('#edit').keypress(editKeypress);
+  // End edit on ESC
+  $('#edit').keyup(function(e){if (e.which == 27) endEdit();});
+  // End edit when mousedown outside the postit
   $('body').mousedown(function(e){if (e.target.id != 'edit') endEdit();});
+  $('#add').click(addPostit);
 }
 $(init);
 </script>
@@ -293,6 +338,9 @@ $(init);
 <span id='timerval'></span><br>
 <button id='startpause'>Start</button><br>
 <button id='abort'>Abort</button>
+</td>
+<td id="postitcontrol" class="inelastic">
+<button id='add'>+</button>
 </td>
 <td id="postitbar0" class="postitbar elastic" style="display:inline-block; background:#fcc;">
 <div>Edit postit</div>
