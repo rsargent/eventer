@@ -23,7 +23,7 @@ body {
   height: 108px;
   vertical-align: top;
 }
-.postitbar *, #edit { 
+.postitbar div, #edit { 
   font-size: 14px;
   background: yellow; 
   border-color: black;
@@ -37,12 +37,24 @@ body {
   word-wrap:break-word;
   white-space: pre-wrap;
 }
-.postitbar * {
+.postitbar div {
   max-width: 100px;
   min-width: 35px;
   margin-left: 4px;
   margin-right: 4px;
   cursor: default;
+}
+#done, #trash {
+  display:inline-block;
+  background: #fcf;
+  width: 100px;
+  height: 100px;
+  text-align: center;
+  font-size:24px;
+  color: grey;
+  border-width: 1px;
+  border-style: solid;
+  border-color: black;
 }
 </style>
 <script src="js/jquery-1.7.1.min.js"></script>
@@ -279,16 +291,23 @@ function endEdit() {
   }
 }
 function deletePostit(postit, previousText) {
+  if (previousText === undefined) {
+    previousText = $(postit).text();
+  }
   if (previousText != '') {
     sendToEventer('Deleted postit "' + previousText + '"');
   }
-  postit.remove();
+  $(postit).remove();
 }
 function addPostit() {
   $('#postitbar0').prepend('<div></div>');
   var postit = $('#postitbar0').children(':first');
   initPostit(postit);
   startEdit(postit);
+}
+function finishPostit(postit) {
+  $(postit).remove();
+  sendToEventer('Finished postit "' + $(postit).text() + '"');
 }
 
 // Return finishes edit, unless shift or alt are pressed, in which case a newline is inserted
@@ -297,7 +316,6 @@ function addPostit() {
 // Apps that use return to finish edit, or alt-return (option-return on mac) to insert newline:
 //    Excel on Windows.  (Excel on Mac uses option-command-return, yuk)
 function editKeypress(e) {
-  console.log(e.which);
   if (e.which == 13 && !e.shiftKey && !e.altKey) {
     e.preventDefault();
     endEdit();
@@ -310,7 +328,7 @@ function initPostit(postit) {
 function init() {
   $('.postitbar').sortable({
                      connectWith: '.postitbar', 
-                     containment: '#topbar', 
+                     containment: 'body', 
                      tolerance: 'pointer',
                      scroll: false,
                      update: updateTopbar
@@ -328,6 +346,8 @@ function init() {
   // End edit when mousedown outside the postit
   $('body').mousedown(function(e){if (e.target.id != 'edit') endEdit();});
   $('#add').click(addPostit);
+  $('#done').droppable({drop: function(event, ui) {finishPostit($(ui.draggable));}});
+  $('#trash').droppable({drop: function(event, ui) {deletePostit($(ui.draggable));}});
 }
 $(init);
 </script>
@@ -344,12 +364,23 @@ $(init);
 </td>
 <td id="postitbar0" class="postitbar elastic" style="display:inline-block; background:#fcc;">
 <div>Edit postit</div>
-<div>Add postit</div>
+<div>Edit postit a b c d e f</div>
+<div>Edit postit a b c d e f</div>
 </td>
 <td id="postitbar1" class="postitbar elastic" style="display:inline-block; text-align: right; background:#cfc;">
 <div>Auto-resize two location divs to make swapping between locations easier</div>
 <div>Relayout with pomodoro timer</div>
 <div>Two locations on the top bar</div>
+</td>
+</tr>
+</table>
+<table>
+<tr>
+<td id="done" class="inelastic">
+Done
+</td>
+<td id="trash" class="inelastic">
+Trash
 </td>
 </tr>
 </table>
