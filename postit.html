@@ -16,14 +16,14 @@ body {
   width: 100px;
   text-align: center;
 }
-#postitcontrol {
-  background: #cff;
-}
 .postitbar {
   height: 108px;
   vertical-align: top;
 }
-.postitbar div, #edit { 
+.postitbar, #postitcontrol {
+  background:#cfc;
+}
+.postit, #edit { 
   font-size: 14px;
   background: yellow; 
   border-color: black;
@@ -37,7 +37,7 @@ body {
   word-wrap:break-word;
   white-space: pre-wrap;
 }
-.postitbar div {
+.postit {
   max-width: 100px;
   min-width: 35px;
   margin-left: 4px;
@@ -55,6 +55,10 @@ body {
   border-width: 1px;
   border-style: solid;
   border-color: black;
+}
+table, tr, td {
+  border-width: 0px; margin: 0px; padding: 0px;
+  border-collapse: collapse
 }
 </style>
 <script src="js/jquery-1.7.1.min.js"></script>
@@ -230,6 +234,11 @@ function timerTick() {
   updateTimer();
 }
 
+function updatePostits() {
+  updateTopbar();
+  savePostits();
+}
+
 function updateTopbar() {
   var fixed=[];
   var variable=[];
@@ -288,6 +297,7 @@ function endEdit() {
       }
     }
     editingDiv = null;
+    updatePostits();
   }
 }
 function deletePostit(postit, previousText) {
@@ -298,16 +308,53 @@ function deletePostit(postit, previousText) {
     sendToEventer('Deleted postit "' + previousText + '"');
   }
   $(postit).remove();
+  updatePostits();
 }
 function addPostit() {
-  $('#postitbar0').prepend('<div></div>');
-  var postit = $('#postitbar0').children(':first');
+  $('#postitbar_left').prepend('<div class="postit"></div>');
+  var postit = $('#postitbar_left').children(':first');
   initPostit(postit);
   startEdit(postit);
 }
 function finishPostit(postit) {
   $(postit).remove();
   sendToEventer('Finished postit "' + $(postit).text() + '"');
+  updatePostits();
+}
+// Serializing postits:
+// Order is in DOM order; left to right, then top to bottom
+function serializePostits() {
+  var ret = [];
+  $('.postit').each(function(i,p){ 
+    ret.push({
+      contents:$(p).text(),
+      container:$(p).parent().attr('id')
+    }); 
+  });
+  return ret;
+}
+// Load postits into containers, selecting the named container when available
+function deserializePostits(postits) {
+  $('.postit').remove();
+  var container = $('.postitbar').first();
+  for (var i = 0; i < postits.length; i++) {
+    var postit = postits[i];
+    var newContainer = $('#'+postit.container);
+    if (newContainer.length > 0) container = newContainer;
+    newContainer.append('<div class="postit">'+postit.contents+'</div>');
+  }
+  initPostit($('.postit'));
+  updatePostits();
+}
+
+function savePostits() {
+  localStorage.postits = JSON.stringify(serializePostits());
+}
+
+function restorePostits() {
+  if (localStorage.postits) {
+    deserializePostits(JSON.parse(localStorage.postits));
+  }
 }
 
 // Return finishes edit, unless shift or alt are pressed, in which case a newline is inserted
@@ -331,14 +378,15 @@ function init() {
                      containment: 'body', 
                      tolerance: 'pointer',
                      scroll: false,
-                     update: updateTopbar
+                     update: updatePostits
                            });
   $('#topbar').disableSelection();
   $(window).resize(updateTopbar);
   $('#startpause').click(startOrPauseTimer);
   $('#abort').click(abortTimer);
   initPostit($('.postitbar *'));
-  updateTopbar();
+  restorePostits();
+  updatePostits();
   updateTimer();
   $('#edit').keypress(editKeypress);
   // End edit on ESC
@@ -362,15 +410,15 @@ $(init);
 <td id="postitcontrol" class="inelastic">
 <button id='add'>+</button>
 </td>
-<td id="postitbar0" class="postitbar elastic" style="display:inline-block; background:#fcc;">
-<div>Edit postit</div>
-<div>Edit postit a b c d e f</div>
-<div>Edit postit a b c d e f</div>
+<td id="postitbar_left" class="postitbar elastic" style="display:inline-block">
+<div class="postit">Edit postit</div>
+<div class="postit">Edit postit a b c d e f</div>
+<div class="postit">Edit postit a b c d e f</div>
 </td>
-<td id="postitbar1" class="postitbar elastic" style="display:inline-block; text-align: right; background:#cfc;">
-<div>Auto-resize two location divs to make swapping between locations easier</div>
-<div>Relayout with pomodoro timer</div>
-<div>Two locations on the top bar</div>
+<td id="postitbar_right" class="postitbar elastic" style="display:inline-block; text-align: right">
+<div class="postit">Auto-resize two location divs to make swapping between locations easier</div>
+<div class="postit">Relayout with pomodoro timer</div>
+<div class="postit">Two locations on the top bar</div>
 </td>
 </tr>
 </table>
