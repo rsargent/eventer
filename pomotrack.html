@@ -1,0 +1,562 @@
+<html>
+<head>
+<style>
+body {
+  font-family: Lucida Grande, Lucida Sans, Arial, sans-serif;
+  margin: 0px;
+}
+
+/**** CSS: overall layout */
+
+table, tr, td {
+  border-width: 0px; margin: 0px; padding: 0px;
+  border-collapse: collapse
+}
+
+.layoutbar {
+  height: 100px;
+}
+
+.layoutbar td {
+  height: 100px;
+}
+
+/**** CSS: Timer */
+
+#timer {
+  font-size:36px;
+  height: 90px;
+  background: #ccf;
+  display: inline-block;
+  padding: 9px;
+  width: 100px;
+  text-align: center;
+}
+
+/**** CSS: Postits */
+
+.postitbar {
+  height: 108px;
+  vertical-align: top;
+}
+
+.postitbar div {
+  vertical-align: top;
+}
+
+.postitbar, #postitcontrol {
+  background:#cfc;
+}
+
+.postit, #edit { 
+  font-size: 14px;
+  background: yellow; 
+  border-color: black;
+  border-style: solid;
+  display: inline-block;
+  border-width: 1px;
+  padding: 3px;
+  height: 100px;
+  font-family: arial;
+  text-align: left;
+  word-wrap:break-word;
+  white-space: pre-wrap;
+}
+
+.postit {
+  max-width: 100px;
+  min-width: 35px;
+  margin-left: 4px;
+  margin-right: 4px;
+  cursor: default;
+}
+
+#done, #trash {
+  background: #fcf;
+  width: 100px;
+  height: 100px;
+  text-align: center;
+  font-size:24px;
+  color: grey;
+  border-width: 1px;
+  border-style: solid;
+  border-color: black;
+}
+
+/***** CSS: Eventer */
+
+#graph {
+  background: #ffc;
+  width: 100px;
+  height: 100px;
+  text-align: center;
+  font-size:24px;
+  color: grey;
+  border-width: 1px;
+  border-style: solid;
+  border-color: black;
+}
+
+#enter {
+  height: 25px;
+}
+
+#history {
+  font-size: 10px;
+  height: 75px;
+  overflow-y: scroll;
+}
+
+#eventer {
+  height: 100px;
+  overflow-y: scroll;
+}
+
+.ui-widget * {
+  font-size: 10px;
+}
+
+</style>
+<script src="js/jquery-1.7.1.min.js"></script>
+<script src="js/jquery-ui-1.8.17.custom.min.js"></script>
+<script src="js/textchange.js"></script>
+<link href="css/cupertino/jquery-ui-1.8.17.custom.css" rel="stylesheet" type="text/css">
+<script>
+
+///// JS: Utilities
+
+// Format a positive number, showing the last two digits
+function f2(n) {
+  var ret = n + '';
+  while (ret.length < 2) ret = '0' + ret;
+  return ret;
+}
+
+///// JS: Layout
+
+function initLayout() {
+  $('.layoutbar').disableSelection();
+  $(window).resize(updateLayout);
+}
+
+$(initLayout);
+
+function childrenWidth(elt) {
+  var width = 0;
+  elt.children().each(function() { 
+    width += $(this).outerWidth(true); 
+  });
+  return width;
+}
+
+function updateLayout() {
+  $('.layoutbar').each(function(x) {
+    console.log("layoutbar " + x);
+    var layoutbar = $(this);
+    var width_used = 0;
+    var nelastic = 0;
+    layoutbar.children('.elastic').each(function() {
+      nelastic++;
+      width_used += childrenWidth($(this));
+    });
+    layoutbar.children('.inelastic').each(function() {
+      width_used += $(this).outerWidth(true);
+    });
+    var total = layoutbar.innerWidth();
+    var margin = total - width_used;
+
+    layoutbar.children('.elastic').each(function() {
+      $(this).css('width', childrenWidth($(this)) + margin / nelastic);
+    });
+  });
+}
+
+///// JS: Timer
+
+var timerState = "idle"; // idle, running, paused
+var startTimerVal = 25*60;
+var timerVal = startTimerVal;
+var timerTimeout = null;
+
+function initTimer() {
+  $('#startpause').click(startOrPauseTimer);
+  $('#abort').click(abortTimer);
+  updateTimer();
+}
+
+$(initTimer);
+
+function resetTimerIfIdle() {
+  if (timerState == 'idle') {
+    timerVal = startTimerVal;
+    updateTimer();
+  } 
+}
+
+function startOrPauseTimer() {
+  if (timerState == 'running') {
+    addEvent('Pause timer ' + timerValue());
+    if (timerTimeout) clearTimeout(timerTimeout);
+    timerState = 'paused';
+  } else {
+    if (timerState == 'idle') {
+      timerVal = startTimerVal;
+      addEvent('Start timer ' + timerValue());
+    } else {
+      addEvent('Unpause timer ' + timerValue());
+    }
+    lastTickTime = new Date().getTime();
+    timerTimeout = setTimeout(timerTick, 1000);
+    timerState = 'running';
+  }
+  updateTimer();
+}
+
+function abortTimer() {
+  if (timerState == 'idle') return;
+  addEvent('Abort timer ' + timerValue());
+  timerState = 'idle';
+  if (timerTimeout) clearTimeout(timerTimeout);
+  timerVal = startTimerVal;
+  updateTimer();
+}
+
+function timerValue() {
+  return f2(Math.floor(timerVal / 60)) + ':' + f2(timerVal % 60);
+}
+
+function updateTimer() {
+  $('#timerval').html(timerValue());
+  if (timerState == 'idle') $('#startpause').html('Start');
+  if (timerState == 'paused') $('#startpause').html('Unpause');
+  if (timerState == 'running') $('#startpause').html('Pause');
+}
+
+function timerTick() {
+  if (timerState != 'running') return;
+  // How many ticks have elapsed?
+  var now = new Date().getTime();
+  // OK to count up to 10 ticks, not more.  More probably means the computer slept or the clock time changed
+  var ticksElapsed = Math.floor((now + 100 - lastTickTime) / 1000);
+  if (ticksElapsed > 10) {
+    ticksElapsed = 10;
+    lastTickTime = now;
+  } else {
+    lastTickTime += ticksElapsed * 1000;
+  }
+  timerVal -= ticksElapsed;
+  if (timerVal <= 0) {
+    timerVal = 0;
+    timerState = 'idle';
+    addEvent('Timer done ' + timerValue());
+    setTimeout(resetTimerIfIdle, 2500);
+  } else {
+    timerTimeout = setTimeout(timerTick, 1000 - now + lastTickTime);
+  }
+  updateTimer();
+}
+
+///// JS: Postits
+
+var editingDiv = null;
+var previousText;
+
+function initPostits() {
+  // Postits
+  $('.postitbar').sortable({
+                     connectWith: '.postitbar', 
+                     containment: 'body', 
+                     tolerance: 'pointer',
+                     scroll: false,
+                     update: updatePostits
+                           });
+  restorePostits();
+  updatePostits();
+  $('#edit').keypress(editKeypress);
+  // End edit on ESC
+  $('#edit').keyup(function(e){if (e.which == 27) endEdit();});
+  // End edit when mousedown outside the postit
+  $('body').mousedown(function(e){if (e.target.id != 'edit') endEdit();});
+  $('#add').click(addPostit);
+  $('#done').droppable({drop: function(event, ui) {finishPostit($(ui.draggable));}});
+  $('#trash').droppable({drop: function(event, ui) {deletePostit($(ui.draggable));}});
+}
+
+$(initPostits);
+
+function updatePostits() {
+  updateLayout();
+  savePostits();
+}
+
+function updateEdit() {
+  if (editingDiv) {
+    editingDiv.text($('#edit').val());
+    $('#edit').css(editingDiv.offset())
+              .width(editingDiv.outerWidth())
+              .height(editingDiv.outerHeight())
+              .show();
+  }
+}
+
+function startEdit(elt) {
+  previousText = elt.text();
+  editingDiv = elt;
+  $('#edit').val(editingDiv.text());
+  updateEdit();
+  $('#edit')[0].focus();
+  $('#edit')[0].select();
+  $('#edit').bind('textchange', updateEdit);
+}
+
+function endEdit() {
+  if (editingDiv) {
+    updateEdit();
+    $('#edit').hide();
+    editingDiv.text($.trim(editingDiv.text()));
+    if (editingDiv.text() == "") {
+      deletePostit(editingDiv, previousText);
+    } else if (editingDiv.text() != previousText) {
+      if (previousText == "") {
+        addEvent('Added postit "' + editingDiv.text() + '"');
+      } else {		  
+        addEvent('Changed postit "' + previousText + '" to "' + editingDiv.text() + '"');
+      }
+    }
+    editingDiv = null;
+    updatePostits();
+  }
+}
+
+function deletePostit(postit, previousText) {
+  if (previousText === undefined) {
+    previousText = $(postit).text();
+  }
+  if (previousText != '') {
+    addEvent('Deleted postit "' + previousText + '"');
+  }
+  $(postit).remove();
+  updatePostits();
+}
+
+function addPostit() {
+  $('#postitbar_left').prepend('<div class="postit"></div>');
+  var postit = $('#postitbar_left').children(':first');
+  initPostit(postit);
+  startEdit(postit);
+}
+
+function finishPostit(postit) {
+  $(postit).remove();
+  addEvent('Finished postit "' + $(postit).text() + '"');
+  updatePostits();
+}
+
+// Serializing postits:
+// Order is in DOM order; left to right, then top to bottom
+function serializePostits() {
+  var ret = [];
+  $('.postit').each(function(i,p){ 
+    ret.push({
+      contents:$(p).text(),
+      container:$(p).parent().attr('id')
+    }); 
+  });
+  return ret;
+}
+
+// Load postits into containers, selecting the named container when available
+function deserializePostits(postits) {
+  $('.postit').remove();
+  var container = $('.postitbar').first();
+  for (var i = 0; i < postits.length; i++) {
+    var postit = postits[i];
+    var newContainer = $('#'+postit.container);
+    if (newContainer.length > 0) container = newContainer;
+    newContainer.append('<div class="postit">'+postit.contents+'</div>');
+  }
+  initPostit($('.postit'));
+  updatePostits();
+}
+
+function savePostits() {
+  localStorage.postits = JSON.stringify(serializePostits());
+}
+
+function restorePostits() {
+  if (localStorage.postits) {
+    deserializePostits(JSON.parse(localStorage.postits));
+  }
+}
+
+// Return finishes edit, unless shift or alt are pressed, in which case a newline is inserted
+// Apps that use return to finish edit, or shift-return to insert newline:
+//    AIM, Google talk, Microsoft Word or google docs, when editing a bullet in a bulleted list
+// Apps that use return to finish edit, or alt-return (option-return on mac) to insert newline:
+//    Excel on Windows.  (Excel on Mac uses option-command-return, yuk)
+function editKeypress(e) {
+  if (e.which == 13 && !e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    endEdit();
+  }
+}
+
+function initPostit(postit) {
+  postit.dblclick(function(){startEdit($(this));});
+}
+
+///// JS: Eventer
+
+var history = [];
+var userId = 2; // test user
+var months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+function initEventer() {
+  restoreHistory();
+  sync();
+  $('#event').keydown(function(e) { if (e.keyCode == 13) addEvent(); })
+             .focus();
+}
+
+$(initEventer);
+
+function loadHistory(h) {
+  history = h;
+  refresh();
+}
+
+function restoreHistory() {
+  if (localStorage.history) {
+    var history = JSON.parse(localStorage.history);
+    for (var i = 0; i < history.length; i++) {
+      if (history[i].sync == 'sending') history[i].sync = 'queued';
+    }
+    loadHistory(history);
+  }
+}
+
+function clearHistory() {
+  loadHistory([]);			
+}
+
+function requeueAll() {
+  for (var i = 0; i < history.length; i++) {
+    history[i].sync = 'queued';
+  }
+  refresh();
+  sync();
+}
+
+function sync() {
+  for (var i = 0; i < history.length; i++) {
+    var item = history[i];
+    if (item.sync == 'queued') {
+      var payload = {};
+      payload.timerange = JSON.stringify({begin: history[i].time, end: history[i].time});
+      payload.comment = history[i].description;
+      payload.dev_nickname = "Eventer";
+      item.sync = 'sending';
+      //var prefix='http://www.bodytrack.org';
+      //var prefix='http://localhost:3009';
+      var prefix='http://rstest.bodytrack.org';
+      $.getJSON(prefix + '/users/' + userId + '/upload?callback=?',
+             payload,
+             function(data, status) {
+               if (status == 'success' && !data.error) {
+                 delete item.sync;
+               } else {
+                 item.sync = 'failed';
+               }
+               refresh();
+               sync();
+             });
+      refresh();
+      return;
+    }
+  }
+}
+
+function beginningOfDay(date)
+{
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function refresh() {
+  localStorage.history = JSON.stringify(history);
+  var autocomplete = [];
+  var historyHtml = [];
+  var done = {};
+  var lastDay = beginningOfDay(new Date());
+  for (var i = history.length-1; i >= 0; i--) {
+    var date = new Date(history[i].time*1000);
+    var day = beginningOfDay(date);
+    if (day.getTime() != lastDay.getTime()) {
+      historyHtml.push("---" + date.getFullYear() + "." + months[date.getMonth()] + "." + date.getDate() + "---<br>");
+      lastDay = day;
+    }
+    var time = f2(date.getHours()) + ":" + f2(date.getMinutes()) + ":" + f2(date.getSeconds());
+    historyHtml.push(time + ' ' + history[i].description + ' ' + (history[i].sync || '') + '<br>');
+    if (!done[history[i].description]) {
+      done[history[i].description] = true;
+      autocomplete.push(history[i].description);
+    }
+  }
+  $('#event').autocomplete({source: autocomplete, delay:100, autoFocus:true});
+  $('#history').html(historyHtml.join(''));
+  $('#history').prop('scrollTop',0); // scroll to top
+}
+
+function addEvent(description) {
+  console.log('Adding event "' + description + '"');
+  if (description === undefined) {
+    description = $('#event').val();
+  }
+  description = $.trim(description);
+  if (description == "") return;
+  console.log('Adding event "' + description + '"');
+  var event={};
+  event.time = new Date().getTime()/1000;
+  event.description = description;
+  event.sync = 'queued';
+  history.push(event);
+  $('#event').val('');
+  refresh();
+  sync();
+}
+
+</script>
+</head>
+<body>
+<table style="width:100%"><tr class="layoutbar">
+<td id="timer" class="inelastic">
+<span id='timerval'></span><br>
+<button id='startpause'>Start</button><br>
+<button id='abort'>Abort</button>
+</td>
+<td id="postitcontrol" class="inelastic" style="width:30px"                                                                           >
+<button id='add'>+</button>
+</td>
+<td id="postitbar_left" class="postitbar elastic" style="display:inline-block"></td>
+<td id="postitbar_right" class="postitbar elastic" style="display:inline-block; text-align: right"></td>
+</tr>
+</table>
+<table style="width:100%"><tr class="layoutbar">
+<td id="done" class="inelastic">
+Done
+</td>
+<td>
+<td id="eventer" class="inelastic" style="width:450px">
+<div id="enter" style="width:100%"><input id="event" style="width:100%"/></div>
+<div id="history"><div>
+</td>
+<td id="graph" class="elastic">
+graph
+</td>
+<td id="trash" class="inelastic">
+Trash
+</td>
+</tr>
+</table>
+<textarea spellcheck="false" id="edit" style="position:absolute; display:none"></textarea>
+</body>
+</html>
